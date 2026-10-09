@@ -1,0 +1,818 @@
+IMPLEMENTATION PLAN & TECHNICAL SPECIFICATION
+STUDENT FINANCE DESKTOP APPLICATION
+============================================================
+
+PROJECT SUMMARY
+---------------
+Project: Student Finance Desktop Application
+Target users: University students
+Platform: Desktop, initially Windows
+Language: Python 3.12+
+GUI: PySide6
+Database: SQLite
+Architecture: MVC + Service Layer + Repository Pattern
+Programming style: Object-Oriented Programming (OOP)
+Visual style: Elegant, professional dark grey
+Primary database during development: finance.db in project root
+Operating mode: Offline-first
+
+PURPOSE
+-------
+Build a desktop application that helps students record daily income and
+expenses, monitor account balances, manage budgets, review reports, and
+estimate how much money they can safely spend until their next income.
+
+IMPORTANT QUALITY PRINCIPLE
+---------------------------
+Absolute freedom from bugs cannot be guaranteed. The application must
+minimize defects through automated tests, input validation, database
+constraints, explicit error handling, and regression testing.
+
+Never claim a feature is complete or a test passes unless it has actually
+been implemented or executed and verified.
+
+1. PRODUCT PRINCIPLES
+---------------------
+1. Financial calculations must be deterministic, consistent, and testable.
+2. Financial data remains local by default.
+3. Separate business logic, UI, and application control flow.
+4. Use OOP with clear class responsibilities; avoid unnecessary abstraction.
+5. Keep code modular, readable, typed, and maintainable.
+6. Make routine transaction entry fast and predictable.
+7. Do not silently discard errors or corrupt existing user data.
+8. Implement and verify features incrementally.
+9. No emoji in the UI, documentation, or application branding.
+10. Prioritize correctness and usability over feature count or visual effects.
+
+2. TECHNOLOGY STACK
+-------------------
+Required:
+- Python 3.12+
+- PySide6 for the desktop interface
+- Python sqlite3 for database access
+- SQLite for persistent local storage
+- pytest for automated tests
+- pytest-qt for GUI tests
+- Ruff for linting and formatting
+
+Recommended when justified:
+- Matplotlib or PyQtGraph for charts
+- openpyxl for optional Excel export
+- PyInstaller for packaging a Windows executable
+- mypy or Pyright for static type checking
+
+Use the Python standard library where practical. Do not add an ORM, web
+framework, cloud service, or external API without a clear requirement.
+
+3. FUNCTIONAL REQUIREMENTS
+--------------------------
+
+3.1 Dashboard
+- Display total balance across active accounts.
+- Display today's income and expenses.
+- Display net cash flow for a selected period.
+- Display monthly budget usage and remaining budget.
+- Display recent transactions.
+- Display daily or weekly spending charts.
+- Display expense distribution by category.
+- Display useful warnings when budgets are close to or over their limits.
+- Derive all production values from actual database records.
+- Show helpful empty states when there is no data.
+
+3.2 Transaction Management
+Users must be able to:
+- Create income transactions.
+- Create expense transactions.
+- Record transfers between their own accounts.
+- Edit and delete transactions, with confirmation for destructive actions.
+- Search descriptions and notes.
+- Filter by date, transaction type, category, and account.
+- Sort by date or amount.
+- Enter a transaction date and optional description.
+- Receive clear field-level validation errors.
+
+Money is denominated in Indonesian rupiah (IDR).
+Use positive integer rupiah values. Reject zero, negative, malformed, or
+out-of-range amounts. Never silently convert invalid values to zero.
+
+3.3 Account Management
+Support cash, bank accounts, and e-wallets.
+Each account should include:
+- ID
+- Name
+- Account type
+- Opening balance
+- Creation timestamp
+- Active/archive status
+
+Calculate balances from opening balance and associated transactions.
+Transfers must debit the source and credit the destination atomically.
+Transfers must not count as income or expenses in consolidated reports.
+Prevent deletion of accounts with financial history unless a safe,
+deliberate archival or migration workflow exists.
+
+3.4 Category Management
+Provide editable default categories.
+
+Suggested expense categories:
+- Food and beverages
+- Housing and rent
+- Transportation
+- Education
+- Internet and mobile data
+- Personal needs
+- Entertainment
+- Health and emergencies
+- Subscriptions
+- Other expenses
+
+Suggested income categories:
+- Allowance
+- Freelance income
+- Salary
+- Scholarship
+- Other income
+
+Allow adding, renaming, and archiving categories. Enforce category-type
+compatibility. Preserve historical references. Do not delete categories
+that are referenced by existing transactions.
+
+3.5 Budget Management
+- Create monthly budgets by expense category.
+- Edit and remove budgets.
+- Display budget amount, used amount, remaining amount, and utilization.
+- Warn at configurable thresholds and when a budget is exceeded.
+- Count only qualifying expense transactions in the correct period/category.
+- Exclude income and transfers from expense budget usage.
+
+3.6 Financial Reports
+Provide:
+- Daily, weekly, and monthly reports.
+- Custom date-range reports.
+- Income versus expense comparisons.
+- Spending by category.
+- Highest-spending categories.
+- Average daily expenses.
+- Net cash flow.
+- CSV export of filtered transactions.
+- Optional Excel export if implemented and tested.
+
+Reports and exports must respect selected dates and filters. Report totals
+must be verified against the underlying transactions.
+
+3.7 Student Survival Mode
+Estimate a daily spending allowance until the next expected income.
+
+Inputs:
+- Current available balance.
+- Expected next income date.
+- Planned mandatory expenses before that date.
+
+Formula:
+Available discretionary balance =
+    Current available balance - Planned mandatory expenses
+
+Suggested daily spending limit =
+    Available discretionary balance / Remaining days
+
+Define whether the current day and expected income date are included, then
+apply that definition consistently and test boundary cases. If the available
+discretionary balance is negative, show a warning rather than presenting a
+negative amount as usable spending money. Label the result as an estimate.
+This feature must never change account balances automatically.
+
+3.8 Data Protection and Settings
+- Create database backups.
+- Validate backup files before restore.
+- Create a recovery backup before replacing current data.
+- Provide currency/date preferences if needed; default currency is IDR.
+- Provide application version information.
+- Configure error logging.
+- Explain that standard SQLite storage is not encrypted by default.
+- Do not claim encryption unless a real encryption mechanism is implemented.
+
+4. NON-FUNCTIONAL REQUIREMENTS
+------------------------------
+Reliability:
+- Use database transactions for multi-step writes.
+- Roll back failed writes.
+- Do not allow invalid input to alter persisted data.
+- Handle database and application exceptions explicitly.
+- Show understandable user-facing errors.
+- Do not silently replace a corrupted database with an empty database.
+
+Performance:
+- Keep the UI responsive during ordinary usage.
+- Index frequently filtered database columns.
+- Avoid loading unnecessary historical records.
+- Use bounded queries or pagination if transaction volume requires it.
+- Do not optimize prematurely without evidence.
+
+Security and privacy:
+- Offline by default.
+- Use parameterized SQL for every user-supplied value.
+- Never concatenate user input directly into SQL statements.
+- Do not store banking passwords or financial credentials.
+- Avoid logging sensitive transaction descriptions or amounts unnecessarily.
+- Do not display raw tracebacks to ordinary users.
+
+5. ARCHITECTURE: MVC + OOP
+--------------------------
+
+5.1 Model / Domain Layer
+Responsibilities:
+- Represent financial entities.
+- Define domain invariants and valid values.
+- Remain independent of PySide6 widgets.
+- Provide domain data to services and repositories.
+
+Suggested entities:
+- Transaction
+- Account
+- Category
+- Budget
+
+Use dataclasses or suitable classes. Do not put GUI logic in domain models.
+
+5.2 View Layer
+Responsibilities:
+- Display data and collect input.
+- Render tables, charts, navigation, forms, and dialogs.
+- Emit signals for user actions.
+- Show loading, empty, success, and error states.
+- Avoid raw SQL and authoritative financial calculations.
+
+Suggested views:
+- MainWindow
+- DashboardView
+- TransactionsView
+- AccountsView
+- CategoriesView
+- BudgetsView
+- ReportsView
+- SettingsView
+- TransactionDialog
+- ConfirmationDialog
+
+5.3 Controller Layer
+Responsibilities:
+- Coordinate View and Service interactions.
+- Validate and normalize user input.
+- Handle UI actions and operation results.
+- Refresh views after successful changes.
+- Keep business rules out of UI event handlers.
+
+Suggested controllers:
+- DashboardController
+- TransactionController
+- AccountController
+- CategoryController
+- BudgetController
+- ReportController
+- SettingsController
+
+5.4 Service Layer
+Implement a separate service layer for financial rules.
+
+Suggested services:
+- FinanceService
+- BudgetService
+- ReportService
+- SurvivalModeService
+- BackupService
+
+Services should not depend on PySide6 and must be testable without
+launching the GUI.
+
+5.5 Repository and Database Layer
+Suggested repositories:
+- TransactionRepository
+- AccountRepository
+- CategoryRepository
+- BudgetRepository
+
+Suggested database components:
+- DatabaseManager
+- Schema/migration manager
+
+Dependency direction:
+View -> Controller -> Service -> Repository -> Database
+
+Domain entities should remain independent of the GUI. Avoid circular
+imports, unnecessary global mutable state, and uncontrolled shared
+connections. Use constructor injection where it improves testability.
+
+6. PROJECT DIRECTORY STRUCTURE
+------------------------------
+Use this as a baseline. Create modules only when they have a real purpose.
+
+student-finance/
+    main.py
+    finance.db
+    requirements.txt
+    pyproject.toml
+    README.md
+    .gitignore
+    docs/
+        implementation-plan.txt
+    app/
+        __init__.py
+        bootstrap.py
+        config/
+            __init__.py
+            settings.py
+            paths.py
+        models/
+            __init__.py
+            transaction.py
+            account.py
+            category.py
+            budget.py
+        repositories/
+            __init__.py
+            transaction_repository.py
+            account_repository.py
+            category_repository.py
+            budget_repository.py
+        services/
+            __init__.py
+            finance_service.py
+            budget_service.py
+            report_service.py
+            survival_mode_service.py
+            backup_service.py
+        controllers/
+            __init__.py
+            dashboard_controller.py
+            transaction_controller.py
+            account_controller.py
+            category_controller.py
+            budget_controller.py
+            report_controller.py
+        views/
+            __init__.py
+            main_window.py
+            dashboard_view.py
+            transactions_view.py
+            accounts_view.py
+            categories_view.py
+            budgets_view.py
+            reports_view.py
+            settings_view.py
+            dialogs/
+        database/
+            __init__.py
+            database_manager.py
+            schema.py
+            migrations/
+        ui/
+            __init__.py
+            theme.py
+            styles.qss
+            components/
+        utils/
+            __init__.py
+            validators.py
+            formatters.py
+            logging_config.py
+    tests/
+        conftest.py
+        unit/
+        integration/
+        ui/
+
+7. SQLITE DATABASE SPECIFICATION
+--------------------------------
+
+7.1 Database Path
+Database filename: finance.db
+
+During development, store the database in the project root alongside
+main.py. Resolve the path relative to the application source location with
+pathlib.Path; never rely on the process's current working directory.
+
+Do not create a new database on every launch. Do not overwrite existing
+database contents during initialization.
+
+When packaging the application, define a separate, explicit writable
+database path or portable mode. A Windows installation directory may not
+be writable. Do not assume the development root is writable in every
+deployment context.
+
+7.2 Required Tables
+
+TABLE: accounts
+- id: INTEGER PRIMARY KEY
+- name: TEXT NOT NULL
+- account_type: TEXT NOT NULL
+- opening_balance: INTEGER NOT NULL
+- created_at: TEXT NOT NULL
+- is_archived: INTEGER NOT NULL DEFAULT 0
+
+TABLE: categories
+- id: INTEGER PRIMARY KEY
+- name: TEXT NOT NULL
+- type: TEXT NOT NULL
+- is_archived: INTEGER NOT NULL DEFAULT 0
+- created_at: TEXT NOT NULL
+
+Constrain category type to supported values such as income and expense.
+
+TABLE: transactions
+- id: INTEGER PRIMARY KEY
+- type: TEXT NOT NULL
+- amount: INTEGER NOT NULL
+- account_id: INTEGER NOT NULL
+- to_account_id: INTEGER NULL
+- category_id: INTEGER NULL
+- description: TEXT NULL
+- transaction_date: TEXT NOT NULL
+- created_at: TEXT NOT NULL
+- updated_at: TEXT NOT NULL
+
+Supported transaction types:
+- income
+- expense
+- transfer
+
+Add CHECK constraints for valid transaction types and positive amounts.
+Transfers require a valid destination account distinct from the source.
+Income and expense records must not have a destination account. Income and
+expense records must reference compatible categories; transfers must not
+use income/expense categories. Enforce what is practical with database
+constraints and validate remaining rules in the service layer.
+
+TABLE: budgets
+- id: INTEGER PRIMARY KEY
+- category_id: INTEGER NOT NULL
+- amount: INTEGER NOT NULL
+- period_year: INTEGER NOT NULL
+- period_month: INTEGER NOT NULL
+- created_at: TEXT NOT NULL
+- updated_at: TEXT NOT NULL
+
+Enforce uniqueness for (category_id, period_year, period_month).
+Budget amount must be positive. Validate period_month is 1 through 12.
+
+Use foreign keys, CHECK constraints, UNIQUE constraints, and indexes
+where appropriate. Define deletion and archival behavior deliberately.
+
+7.3 Initialization and Migrations
+On startup:
+1. Resolve the database path.
+2. Create the database only if it does not exist.
+3. Open a connection.
+4. Enable PRAGMA foreign_keys on every connection.
+5. Apply pending schema migrations.
+6. Seed default categories only when appropriate.
+7. Verify the required schema exists.
+8. Open the main window only after successful initialization.
+
+Use PRAGMA user_version or another explicit migration mechanism. Never
+change an existing schema without a migration plan. If initialization
+fails, show a clear error and stop safely; do not replace the database
+with a blank file.
+
+7.4 Database Access Rules
+- Use parameterized SQL only.
+- Use explicit transaction boundaries for multi-step writes.
+- Roll back failed writes.
+- Set reasonable connection timeouts.
+- Create indexes for frequent filtering and joins.
+- Close connections correctly.
+- Do not share one SQLite connection across threads without a deliberate
+  concurrency strategy.
+- If WAL mode is used, account for -wal and -shm files during backup.
+- Prefer SQLite's backup API for consistent snapshots instead of blindly
+  copying an actively written database file.
+
+7.5 Financial Calculation Rules
+Use integer rupiah, not binary floating-point values, for money.
+
+Per-account balance:
+Balance = Opening Balance + Income - Expenses + Transfers In - Transfers Out
+
+Consolidated net cash flow:
+Net Cash Flow = Total Income - Total Expenses
+
+Transfers cancel out in consolidated totals.
+
+For monthly reports, use the first day of the month inclusive and the first
+day of the following month exclusive. Store dates in a consistent,
+unambiguous ISO format. Use local calendar dates for financial reporting;
+do not silently shift transaction dates through UTC conversion.
+
+8. UI/UX DESIGN SPECIFICATION
+-----------------------------
+
+8.1 Visual Direction
+Create an elegant, professional dark grey desktop application.
+Avoid a gaming aesthetic, excessive gradients, emoji, unnecessary
+animations, visual noise, and oversized decorative elements.
+
+8.2 Initial Color Tokens
+- Main background: #18191C
+- Sidebar background: #202125
+- Card background: #26282D
+- Elevated surface: #2E3036
+- Primary text: #F2F3F5
+- Secondary text: #A5A8B0
+- Border: #3A3D44
+- Primary accent: #8B9BB4
+- Success: #55B987
+- Warning: #E6B566
+- Error: #E16D75
+
+Use color semantically and consistently. Do not rely on color alone to
+communicate status.
+
+8.3 Typography
+Use a clean sans-serif font available on Windows. Prefer Inter when
+properly available/licensed; otherwise use Segoe UI. Use consistent
+typographic hierarchy and tabular numerals for financial values where
+practical.
+
+8.4 Layout
+- Left sidebar for navigation.
+- Top header for page title, period selector, and contextual actions.
+- Main content area for cards, tables, and charts.
+- Consistent spacing and alignment.
+- Clear visual hierarchy.
+- Appropriate empty, loading, success, and error states.
+- Use Qt layouts, not absolute positioning.
+- Keep the application usable at 1366x768 and 1920x1080.
+
+8.5 Interaction Standards
+- Label all form inputs.
+- Show validation errors near relevant fields.
+- Confirm destructive actions.
+- Prevent accidental double submission.
+- Support keyboard navigation and useful shortcuts.
+- Use consistent button hierarchy.
+- Reuse dialogs and UI components.
+- Keep transaction entry fast.
+- Centralize theme tokens and styles rather than duplicating styles.
+
+9. IMPLEMENTATION ROADMAP
+-------------------------
+
+PHASE 1: PROJECT FOUNDATION
+Tasks:
+1. Inspect the existing workspace, files, Python version, and dependencies.
+2. Establish the package structure and environment.
+3. Configure dependencies and code-quality tools.
+4. Implement settings, path resolution, and logging.
+5. Implement DatabaseManager and migrations.
+6. Create domain entities and repository interfaces/implementations.
+7. Create the entry point and bootstrap sequence.
+8. Verify startup and database initialization.
+
+Acceptance criteria:
+- Application starts successfully.
+- finance.db is created in the intended location.
+- Required tables and constraints exist.
+- Initialization can run repeatedly.
+- Existing data is preserved.
+- No import errors occur.
+
+PHASE 2: CORE FINANCIAL LOGIC
+Tasks:
+1. Implement account and category management.
+2. Implement income and expense operations.
+3. Implement atomic transfers.
+4. Implement balance calculations.
+5. Implement date filters.
+6. Implement validation and explicit error handling.
+7. Write unit and integration tests.
+
+Acceptance criteria:
+- Income changes the correct account balance.
+- Expenses change the correct account balance.
+- Transfers update both accounts atomically.
+- Transfers do not change consolidated income or expenses.
+- Invalid records are rejected.
+- Failed writes roll back.
+- Editing or deleting transactions preserves consistent balances.
+
+PHASE 3: MAIN DESKTOP INTERFACE
+Tasks:
+1. Build the main window and navigation.
+2. Implement the dark grey design system.
+3. Build dashboard cards and summaries.
+4. Build transaction table and dialogs.
+5. Connect views to controllers and services.
+6. Implement empty, success, and error states.
+7. Add keyboard navigation.
+8. Test key workflows using pytest-qt.
+
+Acceptance criteria:
+- Main pages are accessible.
+- Users can create, edit, and delete transactions through the UI.
+- Views refresh after successful changes.
+- Ordinary interactions remain responsive.
+- No completed feature contains merely decorative or nonfunctional controls.
+
+PHASE 4: BUDGETS AND REPORTS
+Tasks:
+1. Implement monthly budgets.
+2. Implement budget utilization.
+3. Implement report services and visualizations.
+4. Implement date-range filtering.
+5. Implement CSV export.
+6. Verify totals against independently calculated expected values.
+
+Acceptance criteria:
+- Report totals match expected values.
+- Transfers are excluded from income and expense totals.
+- Date boundaries are correct.
+- Exported data respects filters.
+- Empty periods are handled correctly.
+
+PHASE 5: STUDENT SURVIVAL MODE
+Tasks:
+1. Implement the spending guidance service.
+2. Define and document day-counting rules.
+3. Account for planned mandatory expenses.
+4. Show insufficient-funds warnings.
+5. Integrate with the dashboard.
+6. Test boundary cases.
+
+Acceptance criteria:
+- Identical inputs produce identical results.
+- Zero-day and negative-balance cases are handled safely.
+- Recommendations are labeled as estimates.
+- The feature never changes balances automatically.
+
+PHASE 6: BACKUP, RESTORE, AND HARDENING
+Tasks:
+1. Implement consistent backups.
+2. Validate backups before restore.
+3. Create a recovery backup before replacing data.
+4. Test database failure handling and migrations.
+5. Audit SQL and exception handling.
+6. Run automated quality checks.
+7. Verify behavior in a clean environment.
+
+Acceptance criteria:
+- Backups and restores preserve valid records.
+- Invalid backup files are rejected.
+- Failed restores do not destroy current data.
+- No known critical defects remain unresolved.
+- Mandatory quality gates pass.
+
+PHASE 7: PACKAGING AND RELEASE
+Tasks:
+1. Prepare a clean installation environment.
+2. Package with PyInstaller if required.
+3. Verify writable database path behavior.
+4. Test startup, shutdown, and persistence.
+5. Document installation, usage, backup, and troubleshooting.
+6. Perform final regression testing.
+
+Acceptance criteria:
+- Packaged application launches on a supported Windows environment.
+- Data persists after closing and reopening.
+- Development-only paths are not required.
+- Documentation includes setup, run, and test instructions.
+
+10. TESTING STRATEGY
+--------------------
+
+10.1 Unit Tests
+Test services without launching the GUI:
+- Income and expense calculations.
+- Account balances.
+- Transfers.
+- Monthly totals and date boundaries.
+- Budget utilization.
+- Student Survival Mode.
+- Input validation.
+- Integer money arithmetic.
+
+10.2 Integration Tests
+Use temporary SQLite databases, never the user's real finance.db:
+- Database initialization.
+- Schema migrations.
+- Foreign key enforcement.
+- Category compatibility.
+- Transaction create/update/delete.
+- Atomic transfers.
+- Rollbacks.
+- Backup and restore.
+- Persistence after reconnecting.
+
+10.3 GUI Tests
+Use pytest-qt for:
+- Startup.
+- Navigation.
+- Form validation.
+- Transaction creation/edit/delete.
+- Dialog cancellation.
+- Error presentation.
+- View refresh after mutations.
+
+10.4 Quality Gates
+Run applicable checks, for example:
+
+    python -m pytest
+    ruff check .
+    ruff format --check .
+    mypy app
+
+Configure type checking to match the project. Do not suppress broad
+classes of errors just to make a check pass.
+
+For each failure:
+1. Reproduce it.
+2. Identify the root cause.
+3. Fix the implementation or test.
+4. Rerun the relevant test.
+5. Rerun the broader regression suite where practical.
+
+Record actual commands and results. Never fabricate successful test results.
+
+11. CODING STANDARDS
+--------------------
+1. Add type hints to public functions and service/repository interfaces.
+2. Follow PEP 8 and consistent naming.
+3. Keep each class and function focused on one responsibility.
+4. Use parameterized SQL exclusively.
+5. Do not duplicate business rules across controllers and views.
+6. Avoid circular imports and unnecessary global state.
+7. Use dependency injection where it improves testability.
+8. Do not silently swallow exceptions.
+9. Do not leave TODO, pass, or unimplemented controls in features marked
+   complete, except for intentional abstract methods or documented cases.
+10. Document non-obvious financial rules.
+11. Keep UI code separate from financial calculations.
+12. Use integer rupiah for monetary calculations.
+
+12. DEFINITION OF DONE
+----------------------
+A feature is complete only when:
+- The implementation exists.
+- Acceptance criteria have been checked.
+- Relevant automated tests pass.
+- Error conditions are handled.
+- UI behavior has been verified where applicable.
+- Existing functionality has not regressed.
+- Documentation matches actual behavior.
+
+At the end of each phase, report:
+1. Files created or modified.
+2. Features implemented.
+3. Important architecture decisions.
+4. Tests executed and actual results.
+5. Known issues and limitations.
+6. Remaining tasks.
+7. Exact commands to run and test the application.
+
+Never claim the application is bug-free. Report verified behavior, test
+coverage, unresolved issues, and remaining risks.
+
+13. INITIAL INSTRUCTIONS TO THE AI CODING AGENT
+-----------------------------------------------
+STEP 1 — INSPECT
+Inspect the current project directory, source files, Python version,
+dependencies, and development tools. Do not overwrite or delete existing
+files before understanding their purpose.
+
+STEP 2 — PLAN
+Create or update README.md and docs/implementation-plan.txt. Confirm the
+architecture, schema, interfaces, dependency direction, phase order, and
+acceptance criteria before major implementation.
+
+STEP 3 — BUILD THE FOUNDATION
+Implement the package structure, database manager, schema migrations,
+domain entities, repositories, and test configuration.
+
+STEP 4 — VERIFY
+Run initialization and relevant tests. Fix failures before proceeding.
+
+STEP 5 — IMPLEMENT INCREMENTALLY
+Complete the phases in order. Do not generate the whole application in
+one uncontrolled pass.
+
+STEP 6 — REGRESSION TEST
+After changes, run relevant tests and broader regression tests as practical.
+
+STEP 7 — REPORT HONESTLY
+Provide evidence of completed work and actual test results. If a
+requirement cannot be completed, explain the blocker and its consequences.
+
+FINAL DIRECTIVE
+---------------
+Build a maintainable, offline-first financial desktop application for
+university students using Python, PySide6, and SQLite.
+
+Use MVC with clearly separated service and repository layers, applying
+OOP principles where appropriate. During development, store finance.db
+in the project root using a path resolved relative to the application
+source location. Use an elegant, consistent dark grey UI with professional
+typography, no emoji, and no unnecessary decoration.
+
+Prioritize financial correctness, data integrity, usability, and
+testability over feature count or visual effects.
+
+Do not build the entire application in one pass. Establish the foundation,
+verify it, and implement each feature incrementally with tests.
