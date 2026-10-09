@@ -45,7 +45,7 @@ PrivilegesRequiredOverridesAllowed=commandline dialog
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
-Name: "indonesian"; MessagesFile: "compiler:Languages\Indonesian.isl"
+
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]

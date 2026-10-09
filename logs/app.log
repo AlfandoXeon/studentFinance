@@ -50,3 +50,6 @@
 [2026-10-10 00:20:05] [INFO] [app.bootstrap]: Starting Student Finance v0.1.0...
 [2026-10-10 00:20:05] [INFO] [app.database.database_manager]: Initializing database at D:\Coding\piton\Keuangan\finance.db
 [2026-10-10 00:20:05] [INFO] [app.bootstrap]: Application bootstrap complete.
+[2026-10-10 00:25:47] [INFO] [app.database.database_manager]: Backing up database to D:\Coding\piton\Keuangan\backups\backup_finance_20261010_002547.db
+[2026-10-10 00:25:47] [INFO] [app.database.database_manager]: Database backup created successfully at D:\Coding\piton\Keuangan\backups\backup_finance_20261010_002547.db
+[2026-10-10 00:25:47] [INFO] [app.services.backup_service]: Backup created at D:\Coding\piton\Keuangan\backups\backup_finance_20261010_002547.db
